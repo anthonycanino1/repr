@@ -95,7 +95,11 @@ endif
 ######################
 
 VFILES:=src/Repr/Tactics/All.v\
+  src/Repr/Tactics/Burn.v\
+  src/Repr/Tactics/Rewrite.v\
+  src/Repr/Tactics/Norm.v\
   src/Repr/Tactics/LibTactics.v\
+  src/Repr/Tactics/CpdtTactics.v\
   src/Repr/Lists.v\
   src/Repr/Dbop/Syntax.v
 

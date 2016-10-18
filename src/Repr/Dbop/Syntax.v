@@ -3,6 +3,9 @@ Require Import List.
 Require Import Repr.Lists.
 
 Require Import Repr.Tactics.All.
+Require Import Repr.Tactics.Rewrite.
+Require Import Repr.Tactics.Burn.
+Require Import Repr.Tactics.Norm.
 Require Import Repr.Tactics.LibTactics.
 
 Require Import Coq.Arith.Peano_dec.
@@ -23,6 +26,8 @@ Inductive term : Set :=
   | Abs : term -> term 
   | App : term -> term -> term .
 
+Hint Constructors term.
+
 (* A few examples demonstrating the use of de Bruijn indicies *)
 Example sum : term :=
   Abs (Abs (Add (Var 0) (Var 1))).
@@ -33,6 +38,8 @@ Example three_the_hard_way : term :=
 Inductive typ : Set :=
   | TNat : typ
   | TArrow : typ -> typ -> typ .
+
+Hint Constructors typ.
 
 Definition env := list typ.
 
@@ -80,6 +87,8 @@ Inductive value : term -> Prop :=
   | VAbs :
       forall t, value (Abs t) .
 
+Hint Constructors value.
+
 Inductive step : term -> term -> Prop :=
   | EAdd1 :
       forall t1 t2 t1', 
@@ -106,6 +115,8 @@ Inductive step : term -> term -> Prop :=
         App (Abs t11) v2 ==> [0 ~> v2] t11
 
 where "t1 '==>' t2" := (step t1 t2).
+
+Hint Constructors step.
   
 (* A couple of evaluation examples *)
 Example three_the_hard_way_eval : exists t, three_the_hard_way ==> t.      
@@ -153,33 +164,15 @@ Theorem step_deterministic :
   forall t1 t2 t3, t1 ==> t2 -> t1 ==> t3 -> t2 = t3.
 Proof.
   introh Hs1; generalize dependent t3; induction Hs1; introh Hs2;
-  inverts Hs2; clean 2; 
+  inverts Hs2; clean 2;
   try match goal with
-    | [H : forall t', ?T1 ==> _ -> _, H1 : ?T1 ==> _ |- _ ] => extend (H _ H1); subst; simpl
+    | [H : forall t', ?T1 ==> _ -> _, H1 : ?T1 ==> _ |- _ ] 
+      => extend (H _ H1); subst; simpl
   end; 
   eauto.
 Qed.
 
 (* On to typing *)
-
-Definition free_in (G:env)(x:var) := x < length G.
-Definition has_type (G:env)(x:var)(T:typ) := get G x = Some T.
-
-Theorem free_in_implies_has_type : 
-  forall G x, free_in G x -> exists T, has_type G x T.
-Proof.
-  unfold free_in; unfold has_type; introh Hfr; eapply (idx_lt_length _ _ _ Hfr).
-Qed.
-
-Theorem has_type_implies_free :
-  forall G x T, has_type G x T -> free_in G x.
-Proof.
-  unfold has_type; unfold free_in; intros G x; generalize dependent G;
-  induction x; introh Hht; destruct G; simpl in Hht; clean 1.
-  simpl; auto with arith.
-  simpl; apply lt_n_S; eapply IHx; eassumption.
-Qed.
-
 
 Reserved Notation "G '||-' t '\:' T" (at level 40).
 
@@ -194,7 +187,7 @@ Inductive type_rel : env -> term -> typ -> Prop :=
         G ||- (Add t1 t2) \: TNat
   | TVar :
       forall G x T,
-        has_type G x T ->
+        get G x = Some T ->
         G ||- (Var x) \: T 
   | TAbs :
       forall G t T1 T2,
@@ -208,50 +201,50 @@ Inductive type_rel : env -> term -> typ -> Prop :=
 
 where "G '||-' t '\:' T" := (type_rel G t T).
 
+Hint Constructors type_rel.
 
-Lemma substition_preserves_typing' :
-  forall (G:env)(x:var)(s t:term)(S T:typ),
-    has_type G x S ->
-    delete G x ||- s \: S ->
-    G ||- t \: T ->
-    delete G x ||- [x ~> s] t \: T.
+Ltac inverts_type :=
+  repeat
+    (match goal with
+       | [ H: _ ||- (NConst _) \: _ |- _ ] => inverts H
+       | [ H: _ ||- (Add _ _)  \: _ |- _ ] => inverts H
+       | [ H: _ ||- (Var _)    \: _ |- _ ] => inverts H
+       | [ H: _ ||- (Abs _)    \: _ |- _ ] => inverts H
+       | [ H: _ ||- (App _ _)  \: _ |- _ ] => inverts H
+     end).
+
+Tactic Notation "induction_type" ident(t) :=
+  induction t; rip; simpl; inverts_type; tburn.
+
+Lemma env_weakening
+  :  forall (G:env)(t:term)(T:typ)(x:var)
+  ,  delete G x ||- t \: T
+  -> G ||- lift x t \: T.
 Proof.
-  introh Hhas_type HsT HtT; induction HtT; 
-  try (constructor; spec; assumption).
-
-  simpl. remember (nat_compare x0 x) as X; destruct X.
-  assert (Eq = nat_compare x0 x -> nat_compare x0 x = Eq).
-    intros. auto.
-  spec.
-
-  extend (nat_compare_eq _ _ H0).
-  subst. assert (S = T).
-    unfold has_type in *. rewrite Hhas_type in H. inversion H; subst. reflexivity.
-    subst. auto.
- 
+  rip; gen G T x; induction_type t; tburn.
+  break (le_gt_dec x v); tburn.
+  constructor. rewrite get_delete_above_idx in H2; burn.
 Qed.
+Hint Resolve env_weakening.
 
-
-
-Lemma substition_preserves_typing : 
-  forall (G:env)(x:var)(s t:term)(S T:typ),
-    has_type G x S ->
-    G ||- s \: S ->
-    G ||- t \: T ->
-    delete G x ||- [x ~> s] t \: T.
+Lemma substition_preserves_typing' 
+  :  forall (G:env)(x:var)(s t:term)(U T:typ)
+  ,  get G x = Some U 
+  -> delete G x ||- s \: U 
+  -> G ||- t \: T 
+  -> delete G x ||- [x ~> s] t \: T.
 Proof.
-  introh Hhas_type Hst Htt; induction Htt.
-
-  simpl.
-
-
+  rip; gen G x s U T; induction_type t;
+  (* Burn down TVar *)
+  try(
+    match goal with
+      | [ |- context [ nat_compare _ _ ] ] => 
+        break_nat_compare;
+        tburn;
+        constructor;
+        tburn
+    end);
+  (* Cleanup TAbs *)
+  econstructor; rewrite delete_rewind; tburn.
 Qed.
-    
-    
-    
-     
-
-        
-
-
 

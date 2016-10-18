@@ -1,6 +1,11 @@
 Require Import List.
 
+Require Import Repr.Tactics.CpdtTactics.
+
+Require Import Repr.Tactics.LibTactics.
 Require Import Repr.Tactics.All.
+Require Import Repr.Tactics.Burn.
+Require Import Repr.Tactics.Rewrite.
 
 
 (********************************************************************)
@@ -24,34 +29,29 @@ Fixpoint delete (X:Type) (ls:list X) (idx:nat) : list X :=
 
 Arguments delete [X] ls idx.
 
+Fixpoint insert (X:Type) (ls:list X) (idx:nat) (elm:X) : list X :=
+  match ls, idx with
+    | nil, _           => elm :: nil
+    | _, O             => elm :: ls 
+    | l :: ls', S idx' => l :: insert _ ls' idx' elm
+  end.
+
+Arguments insert [X] _ _ _.
+
 
 (********************************************************************)
 (* Lemmas *)
 
-Lemma option_inj : 
-  forall (x y:Type), 
-    x = y -> Some x = Some y.
-Proof.
-  introh Heq; subst; trivial.
-Qed.
-
 Lemma S_lt_length :
-  forall X n (x:X) (ls:list X), 
-    n < length ls -> S n < length (x :: ls).
-Proof.
-  induction n; introh Hlt; clean 1; simpl; auto with arith.
-Qed.  
+  forall X n (x:X) (ls:list X), n < length ls -> S n < length (x :: ls).
+Proof. induction n; burn. Qed.
 
 Lemma length_lt_S :
- forall X n (x:X) (ls:list X), 
-   S n < length (x :: ls) -> n < length ls.
-Proof.
-  auto with arith.
-Qed.
+ forall X n (x:X) (ls:list X), S n < length (x :: ls) -> n < length ls.
+Proof. crush. Qed.
 
 Theorem idx_lt_length : 
-  forall X idx (ls:list X), 
-    idx < length ls -> exists x, get ls idx = Some x.
+  forall X idx (ls:list X), idx < length ls -> exists x, get ls idx = Some x.
 Proof.
   induction idx; introh Hlt; destruct ls; simpl; clean 1.
   eexists; trivial.
@@ -59,9 +59,76 @@ Proof.
    eexists; reflexivity.
 Qed.  
 
-Theorem delete_rewind :
-  forall X (idx:nat) (ls:list X) (x:X),
-    x :: delete ls idx = delete (x :: ls) (S idx).
+Theorem get_Sidx :
+  forall X (idx:nat) (ls:list X) (x:X), get ls idx = get (x :: ls) (S idx).
 Proof.
-  intros; simpl; auto.
+  rip; gen ls x; induction idx; burn.
 Qed.
+
+Theorem get_Pidx :
+  forall X (idx:nat) (ls:list X) (x:X), get (x :: ls) (S idx) = get ls idx.
+Proof.
+  rip; gen ls x; induction idx; burn.
+Qed.
+
+Theorem delete_rewind :
+  forall X (idx:nat) (ls:list X) (x:X), x :: delete ls idx = delete (x :: ls) (S idx).
+Proof. crush. Qed.
+
+Lemma get_delete_above_idx' 
+  :  forall X (idx n:nat) (ls:list X) r
+  ,  idx < n 
+  -> get ls idx            = r
+  -> get (delete ls n) idx = r.
+Proof.
+  rip; gen idx ls; induction n; destruct ls; destruct idx; tburn.
+  rip; apply IHn; burn.
+Qed.
+Hint Resolve get_delete_above_idx'.
+
+Theorem get_delete_above_idx
+  :  forall X (idx n:nat) (ls:list X) 
+  ,  idx < n
+  -> get (delete ls n) idx = get ls idx.
+Proof.
+  rip; break (get ls idx); burn.
+Qed. 
+Hint Rewrite get_delete_above_idx. 
+
+Lemma get_delete_below_idx' 
+  :  forall X (idx n:nat) (ls:list X) r
+  ,  idx >= n 
+  -> get (delete ls n) idx = r
+  -> get ls (S idx)        = r.
+Proof.
+  rip; gen idx ls; induction n; rip; break ls; break idx; subst; tburn.
+  simpl; simpl in *; apply IHn; burn.
+Qed.
+Hint Resolve get_delete_below_idx'.
+
+Theorem get_delete_below_idx 
+  :  forall X (idx n:nat) (ls:list X) 
+  ,  idx >= n 
+  -> get (delete ls n) idx = get ls (S idx).
+Proof.
+  rip; break (get (delete ls n) idx); symmetry; burn.
+Qed.
+Hint Rewrite get_delete_below_idx.
+
+  
+
+
+  
+
+
+
+
+
+
+
+
+  
+
+  
+  
+

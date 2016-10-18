@@ -1,3 +1,7 @@
+Require Import Coq.omega.Omega.
+Ltac omega := Coq.omega.Omega.omega.
+
+
 (* Some convience tactics. Nothing special *)
 Ltac extend pf :=
   let H := type of pf in
@@ -8,6 +12,9 @@ Ltac extend pf :=
       generalize pf; intros H
   end.
 
+(********************************************************************)
+(* introh tactic : Simple wrapper around intros that automatically 
+ * pulls quantifier variables so we can focus on naming hypotheses *)
 Ltac introh_rec :=
   match goal with
     | [ |- ?P -> ?Q ]    => idtac 
