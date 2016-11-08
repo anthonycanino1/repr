@@ -38,6 +38,20 @@ Fixpoint insert (X:Type) (ls:list X) (idx:nat) (elm:X) : list X :=
 
 Arguments insert [X] _ _ _.
 
+Fixpoint get_split (X:Type) (ls:list X) (idx:nat) : option (X * list X * list X) :=
+  match ls, idx with
+    | l :: ls', O      => Some (l,nil,ls')
+    | l :: ls', S idx' => 
+       match (get_split _ ls' idx')  with
+         | Some (x, lls, rls) 
+           => Some (x, l :: lls, rls)
+         | None          
+           => None
+       end
+    | _, _             => None
+  end.
+
+Arguments get_split [X] _ _.
 
 (********************************************************************)
 (* Lemmas *)
