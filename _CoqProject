@@ -9,3 +9,5 @@ src/Repr/Lists.v
 
 src/Repr/SystemFOp/Kind.v
 src/Repr/SystemFOp/Type.v
+src/Repr/SystemFOp/Term.v
+src/Repr/SystemFOp/TypeRel.v

@@ -102,7 +102,9 @@ VFILES:=src/Repr/Tactics/All.v\
   src/Repr/Tactics/CpdtTactics.v\
   src/Repr/Lists.v\
   src/Repr/SystemFOp/Kind.v\
-  src/Repr/SystemFOp/Type.v
+  src/Repr/SystemFOp/Type.v\
+  src/Repr/SystemFOp/Term.v\
+  src/Repr/SystemFOp/TypeRel.v
 
 ifneq ($(filter-out archclean clean cleanall printenv,$(MAKECMDGOALS)),)
 -include $(addsuffix .d,$(VFILES))

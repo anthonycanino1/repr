@@ -79,6 +79,9 @@ Fixpoint typ_substitute (X:tvar)(U T:typ) : typ :=
        TAll (typ_substitute (S X) (typ_lift 0 U) T')
   end.
 
+Notation "'[' X '|=>' U ']' T" := (typ_substitute X U T) (at level 30).
+
+
 (********************************************************************)
 
 (* We define type environments and some operations over them here. *)

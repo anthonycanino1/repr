@@ -12,26 +12,6 @@ Require Import Coq.Arith.Peano_dec.
 Require Import Coq.Arith.Compare_dec.
 Require Import Coq.Arith.Lt.
 
-Definition var := nat.
-Definition env := list typ.
-
-Inductive term : Set :=
-  | NConst : nat -> term
-  | Add : term -> term -> term
-
-  (* The pure lambda calculus *)                      
-  | Var : var -> term
-  | Abs : typ -> term -> term 
-  | App : term -> term -> term 
-
-  (* System F Extn *)
-  | TyAbs : term -> term
-  | TyApp : term -> typ -> term .
-                            
-Hint Constructors term.
-
-Example id_tm := (TyAbs (Abs (TVar 0) (Var 0))).
-
 Fixpoint tm_lift (dp:nat)(t:term) : term :=
   match t with
     | NConst n =>

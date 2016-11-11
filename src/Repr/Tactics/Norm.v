@@ -68,3 +68,18 @@ Ltac break_nat_compare :=
          norm_nat_compare;
          subst
   end.
+
+(********************************************************************)
+Ltac norm_some :=
+  match goal with
+    | [ H: None   = Some _ |- _ ] => inverts H
+    | [ H: Some _ = None   |- _ ] => inverts H
+    | [ H: Some _ = Some _ |- _ ] => inverts H
+  end.
+
+
+
+
+
+
+  
