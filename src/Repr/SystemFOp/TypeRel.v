@@ -34,9 +34,11 @@ Inductive type_rel : kenv -> tenv -> term -> typ -> Prop :=
   | TR_Var :
       forall D G x T,
         get G x = Some T ->
+        D \\- T \: KStar ->
         D, G ||- (Var x) \: T 
   | TR_Abs :
       forall D G t T1 T2,
+        D \\- T1 \: KStar ->
         D, (T1 :: G) ||- t \: T2 ->
         D, G ||- Abs T1 t \: TArrow T1 T2
   | TR_App :
@@ -51,6 +53,7 @@ Inductive type_rel : kenv -> tenv -> term -> typ -> Prop :=
   | TR_TyApp :
       forall D G t T ty, 
         D, G ||- t \: TAll T ->
+        D \\- ty \: KStar ->
         D, G ||- (TyApp t ty) \: [0 |=> ty] T
 
 where "D ',' G '||-' t '\:' T" := (type_rel D G t T).
@@ -62,7 +65,7 @@ Hint Constructors type_rel.
  * typing relation than the proof of soundness, hence, hey remain here. *)
 
 (* Simple tactic that helps burn down the easy cases. *)
-Ltac inverts_type :=
+Ltac inverts_term :=
   repeat
     (match goal with
        | [ H: _,_ ||- (NConst _)   \: _ |- _ ] => inverts H
@@ -77,7 +80,7 @@ Ltac inverts_type :=
 (* This tactic 'usually' gets most of the inductive and easy cases
  * when we induct over the typing relation. *)
 Tactic Notation "induction_type" ident(t) :=
-  induction t; rip; simpl; inverts_type; tburn.
+  induction t; rip; simpl; inverts_term; tburn.
 
 Lemma get_lift
   :  forall (G:tenv)(x:var)(T:typ)(X:tvar)
@@ -95,36 +98,6 @@ Lemma rewind_typ_lift
 Proof. tburn. Qed.
 Hint Rewrite rewind_typ_lift.
 
-(*
-Lemma le_gt_dec_S
-  :  forall n m pf
-  ,  left pf = le_gt_dec n m 
-  -> exists pf', left pf' = le_gt_dec (S n) (S m). 
-Proof. 
-  rip; dep_destruct (le_gt_dec (S n) (S m)); tburn.
-Qed.
-Hint Resolve le_gt_dec_S. *)
-
-Lemma typ_lift_SX
-  :  forall (X Y:tvar)(T:typ)
-  ,  Y <= X
-  -> typ_lift Y (typ_lift X T) = typ_lift (S X) (typ_lift Y T).
-Proof.
-  rip; gen X Y; induction T; tburn.
-
-  rip;
-  rename t into Z;
-  break Z;
-  repeat(
-    simpl;
-    match goal with 
-      | [ |- context[le_gt_dec ?X ?Y] ] =>
-        break (le_gt_dec X Y)
-    end;
-    tburn
-  ).
-Qed.  
-
 Lemma tenv_lift_SX
   :  forall (G:tenv)(X:tvar)
   ,  tenv_lift 0 (tenv_lift X G) = tenv_lift (S X) (tenv_lift 0 G).
@@ -133,84 +106,38 @@ Proof.
   rewrite IHG; rewrite typ_lift_SX; burn.
 Qed.
 
-(* Handy tactic for burning down TVar case analysis which usually boils down
- * to repeated less than and nat compares *)
-Ltac burn_tvar :=
-  repeat(
-    simpl;
-    break_nat_compare;
-    tburn;
-    match goal with
-      | [ |- context[le_gt_dec ?X ?Y] ] => break (le_gt_dec X Y)
-    end;
-    tburn
-  ).
+(* Lemma used to prove kenv_weaking (since its induction hypothesis is not
+   strong enough.
 
-Lemma tall_injective 
-  :  forall (T1 T2:typ)
-  ,  T1 = T2
-  -> TAll T1 = TAll T2.
-Proof. burn. Qed.
-
-Lemma typ_lift_before_subs
-  :  forall (X Y:tvar)(U T:typ)
-  ,  X <= Y
-  -> typ_lift X ([Y |=> U] T) =  [(S Y) |=> typ_lift X U] typ_lift X T.
-Proof.
-  rip; gen X Y U; induction T; tburn.
-  rip; burn_tvar.
-
-  rip; simpl; eapply tall_injective.
-  rewrite IHT. rewrite <- typ_lift_SX; burn. burn.
-Qed.
-
-Lemma typ_lift_after_subs
-  :  forall (X Y:tvar)(U T:typ)
-  ,  X > Y
-  -> typ_lift X ([Y |=> U] T) =  [Y |=> typ_lift X U] typ_lift X T.
-Proof.
-  rip; gen X Y U; induction T; tburn.
-  rip; burn_tvar.
-  rename t into Z. simpl. break (le_gt_dec X (Z-1)). 
-  
-  
-  
-
-  
-
-  rip; simpl; eapply tall_injective.
-  rewrite IHT. rewrite <- typ_lift_SX; burn. burn.
-Qed.
-
-
-
-Hint Resolve typ_lift_before_subs.
-
-Lemma kenv_weaking
+   We may insert a kind into a position in the kind environment provided
+   we lift over the type environment, term, and type. *)
+Lemma kenv_insert
   :  forall (D:kenv)(G:tenv)(t:term)(T:typ)(X:tvar)
-  ,  delete D X, G ||- t \: T
-  -> D, (tenv_lift X G) ||- (typ_term_lift X t) \: (typ_lift X T).
+  ,  D, G ||- t \: T
+  -> (insert D X KStar), (tenv_lift X G) ||- (typ_term_lift X t) \: (typ_lift X T).
 Proof.
   rip; gen D G T X; induction_type t.
 
-  assert (TNat = typ_lift 0 TNat).
+  (* Add *)
+  assert (TNat = typ_lift X TNat).
     burn.
   econstructor; burn.
 
-  simpl.
-  constructor. autorewrite_goal. eapply IHt. assumption.
+  (* Abs *)
+  econstructor. burn. burn.
 
-  simpl.
-  constructor.
+  (* TyAbs *)
+  econstructor. fold typ_lift. rewrite insert_rewind. rewrite tenv_lift_SX.
+  burn.
 
+  (* TyApp *)
   
-  rewrite tenv_lift_SX. eapply IHt. simpl. burn.
-
-  rename t0 into ty.
-
   
-
-
+  
+  
+  
+  
+  
 
 Qed.  
 

@@ -129,6 +129,52 @@ Proof.
 Qed.
 Hint Rewrite get_delete_below_idx.
 
+Theorem insert_rewind 
+  :  forall X (idx:nat) (ls:list X) (x y:X)
+  ,  x :: insert ls idx y = insert (x :: ls) (S idx) y.
+Proof. crush. Qed.
+
+Lemma get_insert_above_idx' 
+  :  forall X (idx n:nat) (ls:list X) (e:X) r
+  ,  idx < n 
+  -> get ls idx              = Some r
+  -> get (insert ls n e) idx = Some r.
+Proof.
+  rip; gen idx ls e r; induction n; destruct ls; destruct idx; tburn.
+  rip; apply IHn; burn.
+Qed.
+Hint Resolve get_insert_above_idx'.
+
+(*
+Theorem get_insert_above_idx
+  :  forall X (idx n:nat) (ls:list X) (e:X)
+  ,  idx < n
+  -> get (insert ls n e) idx = get ls idx.
+Proof.
+  rip; break (get ls idx). eapply get_insert_above_idx'; burn. 
+Qed. 
+Hint Rewrite get_delete_above_idx. *)
+
+Lemma get_insert_below_idx' 
+  :  forall X (idx n:nat) (ls:list X) (e:X) r
+  ,  idx >= n 
+  -> get ls idx                  = r
+  -> get (insert ls n e) (S idx) = r.
+Proof.
+  rip; gen idx ls e; induction n; rip; break ls; break idx; subst; tburn.
+  simpl; simpl in *; apply IHn; burn.
+Qed.
+Hint Resolve get_insert_below_idx'.
+
+Theorem get_insert_below_idx 
+  :  forall X (idx n:nat) (ls:list X) (e:X)
+  ,  idx >= n 
+  -> get (insert ls n e) (S idx) = get ls idx.
+Proof.
+  rip; break (get (insert ls n e) idx); burn.
+Qed.
+Hint Rewrite get_insert_below_idx.
+
   
 
 
