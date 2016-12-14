@@ -89,6 +89,16 @@ Theorem delete_rewind :
   forall X (idx:nat) (ls:list X) (x:X), x :: delete ls idx = delete (x :: ls) (S idx).
 Proof. crush. Qed.
 
+Theorem cons_as_insert
+  :  forall X (ls:list X) (x:X)
+  ,  x :: ls = insert ls 0 x.
+Proof. induction ls; crush. Qed.
+
+Theorem insert_rewind 
+  :  forall X (idx:nat) (ls:list X) (x y:X)
+  ,  x :: insert ls idx y = insert (x :: ls) (S idx) y.
+Proof. crush. Qed.
+
 Lemma get_delete_above_idx' 
   :  forall X (idx n:nat) (ls:list X) r
   ,  idx < n 
@@ -129,11 +139,6 @@ Proof.
 Qed.
 Hint Rewrite get_delete_below_idx.
 
-Theorem insert_rewind 
-  :  forall X (idx:nat) (ls:list X) (x y:X)
-  ,  x :: insert ls idx y = insert (x :: ls) (S idx) y.
-Proof. crush. Qed.
-
 Lemma get_insert_above_idx' 
   :  forall X (idx n:nat) (ls:list X) (e:X) r
   ,  idx < n 
@@ -144,16 +149,6 @@ Proof.
   rip; apply IHn; burn.
 Qed.
 Hint Resolve get_insert_above_idx'.
-
-(*
-Theorem get_insert_above_idx
-  :  forall X (idx n:nat) (ls:list X) (e:X)
-  ,  idx < n
-  -> get (insert ls n e) idx = get ls idx.
-Proof.
-  rip; break (get ls idx). eapply get_insert_above_idx'; burn. 
-Qed. 
-Hint Rewrite get_delete_above_idx. *)
 
 Lemma get_insert_below_idx' 
   :  forall X (idx n:nat) (ls:list X) (e:X) r

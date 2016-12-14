@@ -100,6 +100,7 @@ VFILES:=src/Repr/Tactics/All.v\
   src/Repr/Tactics/Norm.v\
   src/Repr/Tactics/LibTactics.v\
   src/Repr/Tactics/CpdtTactics.v\
+  src/Repr/Tactics.v\
   src/Repr/Lists.v\
   src/Repr/SystemFOp/Kind.v\
   src/Repr/SystemFOp/Type.v\

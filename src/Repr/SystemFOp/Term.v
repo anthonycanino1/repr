@@ -28,6 +28,48 @@ Inductive term : Set :=
   | TyApp  : term -> typ -> term .
 Hint Constructors term.
 
+(* Unfortunately, formalizing System F in Coq means we cannot simply overload 
+ * lifting and substition for types over terms. This gets ugly and tedious. *)
+Fixpoint typ_term_lift (dp:nat)(t:term) : term :=
+  match t with
+    | NConst n =>
+       NConst n
+    | Add t1 t2 =>
+       Add (typ_term_lift dp t1) (typ_term_lift dp t2)
+    | Var x =>
+       Var x
+    | Abs ty t =>
+       Abs (typ_lift dp ty) ((typ_term_lift dp) t)
+    | App t1 t2 =>
+       App (typ_term_lift dp t1) (typ_term_lift dp t2) 
+    | TyAbs t =>
+       TyAbs (typ_term_lift (S dp) t)
+    | TyApp t ty =>
+       TyApp (typ_term_lift dp t) (typ_lift dp ty)
+   end.
+
+Fixpoint typ_term_substitute (X:tvar)(U:typ)(t:term) : term :=
+  match t with
+    | NConst n => 
+       NConst n
+    | Add t1 t2 => 
+       Add (typ_term_substitute X U t1) (typ_term_substitute X U t2)
+    | Var x => 
+       Var x
+    | Abs ty t' =>
+       Abs (typ_substitute X U ty) (typ_term_substitute X U t')
+    | App t1 t2 =>
+       App (typ_term_substitute X U t1) (typ_term_substitute X U t2)
+    | TyAbs t' =>
+       TyAbs (typ_term_substitute (S X) (typ_lift 0 U) t')
+    | TyApp t' ty =>
+       TyApp (typ_term_substitute X U t') (typ_substitute X U ty)
+  end.
+
+(* Some notation to make our lives easier. *)
+Notation "'[' X '~~>' U ']' t" := (typ_term_substitute X U t) (at level 30).
+
+
 (* Standard de bruijn lifting and substitution operations over terms *)
 Fixpoint term_lift (dp:nat)(t:term) : term :=
   match t with
@@ -36,7 +78,7 @@ Fixpoint term_lift (dp:nat)(t:term) : term :=
     | Add t1 t2 =>
        Add (term_lift dp t1) (term_lift dp t2)
     | Var x =>
-       if (le_gt_dec dp x) then Var (S x) else Var x
+       if (lift_le_gt_dec dp x) then Var (S x) else Var x
     | Abs ty t =>
        Abs ty (term_lift (S dp) t)
     | App t1 t2 =>
@@ -64,7 +106,7 @@ Fixpoint term_substitute (x:var)(s t:term) : term :=
     | App t1 t2 =>
        App (term_substitute x s t1) (term_substitute x s t2)
     | TyAbs t' =>
-       TyAbs (term_substitute x s t')
+       TyAbs (term_substitute x (typ_term_lift 0 s) t')
     | TyApp t' ty =>
        TyApp (term_substitute x s t') ty
   end.
@@ -134,46 +176,6 @@ Hint Unfold value.
  * relation to TypeRel.v *)
 
 
-(* Unfortunately, formalizing System F in Coq means we cannot simply overload 
- * lifting and substition for types over terms. This gets ugly and tedious. *)
-Fixpoint typ_term_lift (dp:nat)(t:term) : term :=
-  match t with
-    | NConst n =>
-       NConst n
-    | Add t1 t2 =>
-       Add (typ_term_lift dp t1) (typ_term_lift dp t2)
-    | Var x =>
-       Var x
-    | Abs ty t =>
-       Abs (typ_lift dp ty) ((typ_term_lift dp) t)
-    | App t1 t2 =>
-       App (typ_term_lift dp t1) (typ_term_lift dp t2) 
-    | TyAbs t =>
-       TyAbs (typ_term_lift (S dp) t)
-    | TyApp t ty =>
-       TyApp (typ_term_lift dp t) (typ_lift dp ty)
-   end.
-
-Fixpoint typ_term_substitute (X:tvar)(U:typ)(t:term) : term :=
-  match t with
-    | NConst n => 
-       NConst n
-    | Add t1 t2 => 
-       Add (typ_term_substitute X U t1) (typ_term_substitute X U t2)
-    | Var x => 
-       Var x
-    | Abs ty t' =>
-       Abs (typ_substitute X U ty) (typ_term_substitute X U t')
-    | App t1 t2 =>
-       App (typ_term_substitute X U t1) (typ_term_substitute X U t2)
-    | TyAbs t' =>
-       TyAbs (typ_term_substitute X U t')
-    | TyApp t' ty =>
-       TyApp (typ_term_substitute X U t') (typ_substitute X U ty)
-  end.
-
-(* Some notation to make our lives easier. *)
-Notation "'[' X '~~>' U ']' t" := (typ_term_substitute X U t) (at level 30).
 
 (* We define a small-step semantics for System F. I prefer a notational definition
  * when it is obviously what we mean; hence, the '==>'. *)
