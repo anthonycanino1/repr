@@ -49,8 +49,10 @@ vo_to_obj = $(addsuffix .o,\
 #                        #
 ##########################
 
+OCAMLLIBS?=-I "src/Repr/Tactics/Plugin"
 COQLIBS?=\
-  -R "src/Repr" Repr
+  -R "src/Repr" Repr\
+  -I "src/Repr/Tactics/Plugin"
 COQDOCLIBS?=\
   -R "src/Repr" Repr
 
@@ -71,6 +73,54 @@ GALLINA?="$(COQBIN)gallina"
 COQDOC?="$(COQBIN)coqdoc"
 COQCHK?="$(COQBIN)coqchk"
 COQMKTOP?="$(COQBIN)coqmktop"
+
+COQSRCLIBS?=-I "$(COQLIB)kernel" \
+-I "$(COQLIB)lib" \
+-I "$(COQLIB)library" \
+-I "$(COQLIB)parsing" \
+-I "$(COQLIB)pretyping" \
+-I "$(COQLIB)interp" \
+-I "$(COQLIB)printing" \
+-I "$(COQLIB)intf" \
+-I "$(COQLIB)proofs" \
+-I "$(COQLIB)tactics" \
+-I "$(COQLIB)tools" \
+-I "$(COQLIB)toplevel" \
+-I "$(COQLIB)stm" \
+-I "$(COQLIB)grammar" \
+-I "$(COQLIB)config" \
+ \
+  -I "$(COQLIB)/plugins/btauto" \
+  -I "$(COQLIB)/plugins/cc" \
+  -I "$(COQLIB)/plugins/decl_mode" \
+  -I "$(COQLIB)/plugins/derive" \
+  -I "$(COQLIB)/plugins/extraction" \
+  -I "$(COQLIB)/plugins/firstorder" \
+  -I "$(COQLIB)/plugins/fourier" \
+  -I "$(COQLIB)/plugins/funind" \
+  -I "$(COQLIB)/plugins/micromega" \
+  -I "$(COQLIB)/plugins/nsatz" \
+  -I "$(COQLIB)/plugins/omega" \
+  -I "$(COQLIB)/plugins/quote" \
+  -I "$(COQLIB)/plugins/romega" \
+  -I "$(COQLIB)/plugins/rtauto" \
+  -I "$(COQLIB)/plugins/setoid_ring" \
+  -I "$(COQLIB)/plugins/syntax" \
+  -I "$(COQLIB)/plugins/xml"
+ZFLAGS=$(OCAMLLIBS) $(COQSRCLIBS) -I $(CAMLP4LIB)
+
+CAMLC?=$(OCAMLC) -c -rectypes -thread
+CAMLOPTC?=$(OCAMLOPT) -c -rectypes -thread
+CAMLLINK?=$(OCAMLC) -rectypes -thread
+CAMLOPTLINK?=$(OCAMLOPT) -rectypes -thread
+GRAMMARS?=grammar.cma
+ifeq ($(CAMLP4),camlp5)
+CAMLP4EXTEND=pa_extend.cmo q_MLast.cmo pa_macro.cmo unix.cma threads.cma
+else
+CAMLP4EXTEND=threads.cma
+endif
+PP?=-pp '$(CAMLP4O) -I $(CAMLLIB) -I $(CAMLLIB)threads/ $(COQSRCLIBS) compat5.cmo \
+  $(CAMLP4EXTEND) $(GRAMMARS) $(CAMLP4OPTIONS) -impl'
 
 ##################
 #                #
@@ -100,8 +150,10 @@ VFILES:=src/Repr/Tactics/All.v\
   src/Repr/Tactics/Norm.v\
   src/Repr/Tactics/LibTactics.v\
   src/Repr/Tactics/CpdtTactics.v\
+  src/Repr/Tactics/Opburn.v\
   src/Repr/Tactics.v\
   src/Repr/Lists.v\
+  src/Repr/Tactics/Plugin/ConstructionTac.v\
   src/Repr/SystemFOp/Kind.v\
   src/Repr/SystemFOp/Type.v\
   src/Repr/SystemFOp/Term.v\
@@ -119,6 +171,7 @@ endif
 
 VO=vo
 VOFILES:=$(VFILES:.v=.$(VO))
+VOFILESINC=$(filter $(wildcard src/Repr/Tactics/Plugin/*),$(VOFILES)) 
 VOFILES1=$(patsubst src/Repr/%,%,$(filter src/Repr/%,$(VOFILES)))
 GLOBFILES:=$(VFILES:.v=.glob)
 GFILES:=$(VFILES:.v=.g)
@@ -127,7 +180,48 @@ GHTMLFILES:=$(VFILES:.v=.g.html)
 OBJFILES=$(call vo_to_obj,$(VOFILES))
 ALLNATIVEFILES=$(OBJFILES:.o=.cmi) $(OBJFILES:.o=.cmo) $(OBJFILES:.o=.cmx) $(OBJFILES:.o=.cmxs)
 NATIVEFILES=$(foreach f, $(ALLNATIVEFILES), $(wildcard $f))
+NATIVEFILESINC=$(filter $(wildcard src/Repr/Tactics/Plugin/*),$(NATIVEFILES)) 
 NATIVEFILES1=$(patsubst src/Repr/%,%,$(filter src/Repr/%,$(NATIVEFILES)))
+ML4FILES:=src/Repr/Tactics/Plugin/construction.ml4
+
+ifneq ($(filter-out archclean clean cleanall printenv,$(MAKECMDGOALS)),)
+-include $(addsuffix .d,$(ML4FILES))
+else
+ifeq ($(MAKECMDGOALS),)
+-include $(addsuffix .d,$(ML4FILES))
+endif
+endif
+
+.SECONDARY: $(addsuffix .d,$(ML4FILES))
+
+MLLIBFILES:=src/Repr/Tactics/Plugin/construction_plugin.mllib
+
+ifneq ($(filter-out archclean clean cleanall printenv,$(MAKECMDGOALS)),)
+-include $(addsuffix .d,$(MLLIBFILES))
+else
+ifeq ($(MAKECMDGOALS),)
+-include $(addsuffix .d,$(MLLIBFILES))
+endif
+endif
+
+.SECONDARY: $(addsuffix .d,$(MLLIBFILES))
+
+ALLCMOFILES:=$(ML4FILES:.ml4=.cmo)
+CMOFILES=$(filter-out $(addsuffix .cmo,$(foreach lib,$(MLLIBFILES:.mllib=_MLLIB_DEPENDENCIES) $(MLPACKFILES:.mlpack=_MLPACK_DEPENDENCIES),$($(lib)))),$(ALLCMOFILES))
+CMOFILESINC=$(filter $(wildcard src/Repr/Tactics/Plugin/*),$(CMOFILES)) 
+CMOFILES1=$(patsubst src/Repr/%,%,$(filter src/Repr/%,$(CMOFILES)))
+CMXFILES=$(CMOFILES:.cmo=.cmx)
+OFILES=$(CMXFILES:.cmx=.o)
+CMAFILES:=$(MLLIBFILES:.mllib=.cma)
+CMAFILESINC=$(filter $(wildcard src/Repr/Tactics/Plugin/*),$(CMAFILES)) 
+CMAFILES1=$(patsubst src/Repr/%,%,$(filter src/Repr/%,$(CMAFILES)))
+CMXAFILES:=$(CMAFILES:.cma=.cmxa)
+CMIFILES=$(ALLCMOFILES:.cmo=.cmi)
+CMIFILESINC=$(filter $(wildcard src/Repr/Tactics/Plugin/*),$(CMIFILES)) 
+CMIFILES1=$(patsubst src/Repr/%,%,$(filter src/Repr/%,$(CMIFILES)))
+CMXSFILES=$(CMXFILES:.cmx=.cmxs) $(CMXAFILES:.cmxa=.cmxs)
+CMXSFILESINC=$(filter $(wildcard src/Repr/Tactics/Plugin/*),$(CMXSFILES)) 
+CMXSFILES1=$(patsubst src/Repr/%,%,$(filter src/Repr/%,$(CMXSFILES)))
 ifeq '$(HASNATDYNLINK)' 'true'
 HASNATDYNLINK_OR_EMPTY := yes
 else
@@ -140,7 +234,7 @@ endif
 #                                     #
 #######################################
 
-all: $(VOFILES) 
+all: $(VOFILES) $(CMOFILES) $(CMAFILES) $(if $(HASNATDYNLINK_OR_EMPTY),$(CMXSFILES)) 
 
 quick: $(VOFILES:.vo=.vio)
 
@@ -195,10 +289,26 @@ opt:
 userinstall:
 	+$(MAKE) USERINSTALL=true install
 
-install:
-	cd "src/Repr" && for i in $(NATIVEFILES1) $(GLOBFILES1) $(VFILES1) $(VOFILES1); do \
+install-natdynlink:
+	cd "src/Repr" && for i in $(CMXSFILES1); do \
+	 install -d "`dirname "$(DSTROOT)"$(COQLIBINSTALL)/Repr/$$i`"; \
+	 install -m 0755 $$i "$(DSTROOT)"$(COQLIBINSTALL)/Repr/$$i; \
+	done
+	for i in $(CMXSFILESINC); do \
+	 install -m 0755 $$i "$(DSTROOT)"$(COQLIBINSTALL)/Repr/`basename $$i`; \
+	done
+
+install-toploop: $(MLLIBFILES:.mllib=.cmxs)
+	 install -d "$(DSTROOT)"$(COQTOPINSTALL)/
+	 install -m 0755 $?  "$(DSTROOT)"$(COQTOPINSTALL)/
+
+install:$(if $(HASNATDYNLINK_OR_EMPTY),install-natdynlink)
+	cd "src/Repr" && for i in $(CMAFILES1) $(CMIFILES1) $(CMOFILES1) $(NATIVEFILES1) $(GLOBFILES1) $(VFILES1) $(VOFILES1); do \
 	 install -d "`dirname "$(DSTROOT)"$(COQLIBINSTALL)/Repr/$$i`"; \
 	 install -m 0644 $$i "$(DSTROOT)"$(COQLIBINSTALL)/Repr/$$i; \
+	done
+	for i in $(CMAFILESINC) $(CMIFILESINC) $(CMOFILESINC) $(NATIVEFILESINC) $(GLOBFILESINC) $(VFILESINC) $(VOFILESINC); do \
+	 install -m 0644 $$i "$(DSTROOT)"$(COQLIBINSTALL)/Repr/`basename $$i`; \
 	done
 
 install-doc:
@@ -209,7 +319,8 @@ install-doc:
 
 uninstall_me.sh: Makefile
 	echo '#!/bin/sh' > $@
-	printf 'cd "$${DSTROOT}"$(COQLIBINSTALL)/Repr && rm -f $(NATIVEFILES1) $(GLOBFILES1) $(VFILES1) $(VOFILES1) && find . -type d -and -empty -delete\ncd "$${DSTROOT}"$(COQLIBINSTALL) && find "Repr" -maxdepth 0 -and -empty -exec rmdir -p \{\} \;\n' >> "$@"
+	printf 'cd "$${DSTROOT}"$(COQLIBINSTALL)/Repr && rm -f $(CMXSFILES1) && \\\nfor i in $(CMXSFILESINC); do rm -f "`basename "$$i"`"; done && find . -type d -and -empty -delete\ncd "$${DSTROOT}"$(COQLIBINSTALL) && find "Repr" -maxdepth 0 -and -empty -exec rmdir -p \{\} \;\n' >> "$@"
+	printf 'cd "$${DSTROOT}"$(COQLIBINSTALL)/Repr && rm -f $(CMAFILES1) $(CMIFILES1) $(CMOFILES1) $(NATIVEFILES1) $(GLOBFILES1) $(VFILES1) $(VOFILES1) && \\\nfor i in $(CMAFILESINC) $(CMIFILESINC) $(CMOFILESINC) $(NATIVEFILESINC) $(GLOBFILESINC) $(VFILESINC) $(VOFILESINC); do rm -f "`basename "$$i"`"; done && find . -type d -and -empty -delete\ncd "$${DSTROOT}"$(COQLIBINSTALL) && find "Repr" -maxdepth 0 -and -empty -exec rmdir -p \{\} \;\n' >> "$@"
 	printf 'cd "$${DSTROOT}"$(COQDOCINSTALL)/Repr \\\n' >> "$@"
 	printf '&& rm -f $(shell find "html" -maxdepth 1 -and -type f -print)\n' >> "$@"
 	printf 'cd "$${DSTROOT}"$(COQDOCINSTALL) && find Repr/html -maxdepth 0 -and -empty -exec rmdir -p \{\} \;\n' >> "$@"
@@ -235,8 +346,13 @@ uninstall: uninstall_me.sh
 	@echo "B $(COQLIB) stm" >> .merlin
 	@echo "B $(COQLIB) grammar" >> .merlin
 	@echo "B $(COQLIB) config" >> .merlin
+	@echo "B /home/acanino/Projects/coqp/repr/src/Repr/Tactics/Plugin" >> .merlin
+	@echo "S /home/acanino/Projects/coqp/repr/src/Repr/Tactics/Plugin" >> .merlin
 
 clean::
+	rm -f $(ALLCMOFILES) $(CMIFILES) $(CMAFILES)
+	rm -f $(ALLCMOFILES:.cmo=.cmx) $(CMXAFILES) $(CMXSFILES) $(ALLCMOFILES:.cmo=.o) $(CMXAFILES:.cmxa=.a)
+	rm -f $(addsuffix .d,$(MLFILES) $(MLIFILES) $(ML4FILES) $(MLLIBFILES) $(MLPACKFILES))
 	rm -f $(OBJFILES) $(OBJFILES:.o=.native) $(NATIVEFILES)
 	find . -name .coq-native -type d -empty -delete
 	rm -f $(VOFILES) $(VOFILES:.vo=.vio) $(GFILES) $(VFILES:.v=.v.d) $(VFILES:=.beautified) $(VFILES:=.old)
@@ -268,6 +384,30 @@ Makefile: _CoqProject
 # Implicit rules. #
 #                 #
 ###################
+
+$(ML4FILES:.ml4=.cmo): %.cmo: %.ml4
+	$(CAMLC) $(ZDEBUG) $(ZFLAGS) $(PP) -impl $<
+
+$(filter-out $(addsuffix .cmx,$(foreach lib,$(MLPACKFILES:.mlpack=_MLPACK_DEPENDENCIES),$($(lib)))),$(ML4FILES:.ml4=.cmx)): %.cmx: %.ml4
+	$(CAMLOPTC) $(ZDEBUG) $(ZFLAGS) $(PP) -impl $<
+
+$(addsuffix .d,$(ML4FILES)): %.ml4.d: %.ml4
+	$(OCAMLDEP) -slash $(OCAMLLIBS) $(PP) -impl "$<" > "$@" || ( RV=$$?; rm -f "$@"; exit $${RV} )
+
+$(filter-out $(MLLIBFILES:.mllib=.cmxs),$(MLFILES:.ml=.cmxs) $(ML4FILES:.ml4=.cmxs) $(MLPACKFILES:.mlpack=.cmxs)): %.cmxs: %.cmx
+	$(CAMLOPTLINK) $(ZDEBUG) $(ZFLAGS) -shared -o $@ $<
+
+$(MLLIBFILES:.mllib=.cmxs): %.cmxs: %.cmxa
+	$(CAMLOPTLINK) $(ZDEBUG) $(ZFLAGS) -linkall -shared -o $@ $<
+
+$(MLLIBFILES:.mllib=.cma): %.cma: | %.mllib
+	$(CAMLLINK) $(ZDEBUG) $(ZFLAGS) -a -o $@ $^
+
+$(MLLIBFILES:.mllib=.cmxa): %.cmxa: | %.mllib
+	$(CAMLOPTLINK) $(ZDEBUG) $(ZFLAGS) -a -o $@ $^
+
+$(addsuffix .d,$(MLLIBFILES)): %.mllib.d: %.mllib
+	$(COQDEP) $(OCAMLLIBS) -c "$<" > "$@" || ( RV=$$?; rm -f "$@"; exit $${RV} )
 
 $(VOFILES): %.vo: %.v
 	$(COQC) $(COQDEBUG) $(COQFLAGS) $*

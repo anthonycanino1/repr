@@ -17,46 +17,47 @@ Require Import Repr.SystemFOp.Type.
 Require Import Repr.SystemFOp.Term.
 
 Require Import Repr.Tactics.CpdtTactics.
+Require Import Repr.Tactics.Opburn.
 
 (* We define the typing relation over kind and type environments. D and G standing
    for delta and gamma resp. *)
-Reserved Notation "D ',' G '||-' t '\:' T" (at level 40).
+Reserved Notation "D '\,' G '||-' t '\:' T" (at level 40).
 
 Inductive type_rel : kenv -> tenv -> term -> typ -> Prop :=
   | TR_NConst :
       forall D G n,
-        D, G ||- (NConst n) \: TNat
+        D \, G ||- (NConst n) \: TNat
   | TR_Add :
       forall D G t1 t2,
-        D, G ||- t1 \: TNat ->
-        D, G ||- t2 \: TNat ->
-        D, G ||- (Add t1 t2) \: TNat
+        D \, G ||- t1 \: TNat ->
+        D \, G ||- t2 \: TNat ->
+        D \, G ||- (Add t1 t2) \: TNat
   | TR_Var :
       forall D G x T,
         get G x = Some T ->
         D \\- T \: KStar ->
-        D, G ||- (Var x) \: T 
+        D \, G ||- (Var x) \: T 
   | TR_Abs :
       forall D G t T1 T2,
         D \\- T1 \: KStar ->
-        D, (T1 :: G) ||- t \: T2 ->
-        D, G ||- Abs T1 t \: TArrow T1 T2
+        D \, (T1 :: G) ||- t \: T2 ->
+        D \, G ||- Abs T1 t \: TArrow T1 T2
   | TR_App :
       forall D G t1 t2 T1 T2,
-        D, G ||- t1 \: TArrow T1 T2 ->
-        D, G ||- t2 \: T1 ->
-        D, G ||- App t1 t2 \: T2
+        D \, G ||- t1 \: TArrow T1 T2 ->
+        D \, G ||- t2 \: T1 ->
+        D \, G ||- App t1 t2 \: T2
   | TR_TyAbs :
       forall D G t T,
-        (KStar :: D), (tenv_lift 0 G) ||- t \: T ->
-        D, G ||- (TyAbs t) \: TAll T
+        (KStar :: D) \, (tenv_lift 0 G) ||- t \: T ->
+        D \, G ||- (TyAbs t) \: TAll T
   | TR_TyApp :
       forall D G t T T', 
-        D, G ||- t \: TAll T ->
+        D \, G ||- t \: TAll T ->
         D \\- T' \: KStar ->
-        D, G ||- (TyApp t T') \: [0 |=> T'] T
+        D \, G ||- (TyApp t T') \: [0 |=> T'] T
 
-where "D ',' G '||-' t '\:' T" := (type_rel D G t T).
+where "D '\,' G '||-' t '\:' T" := (type_rel D G t T).
 
 Hint Constructors type_rel.
 
@@ -68,13 +69,13 @@ Hint Constructors type_rel.
 Ltac inverts_term :=
   repeat
     (match goal with
-       | [ H: _,_ ||- (NConst _)   \: _ |- _ ] => inverts H
-       | [ H: _,_ ||- (Add _ _)    \: _ |- _ ] => inverts H
-       | [ H: _,_ ||- (Var _)      \: _ |- _ ] => inverts H
-       | [ H: _,_ ||- (Abs _ _)    \: _ |- _ ] => inverts H
-       | [ H: _,_ ||- (App _ _)    \: _ |- _ ] => inverts H
-       | [ H: _,_ ||- (TyAbs _)    \: _ |- _ ] => inverts H
-       | [ H: _,_ ||- (TyApp _ _)  \: _ |- _ ] => inverts H
+       | [ H: _\,_ ||- (NConst _)   \: _ |- _ ] => inverts H
+       | [ H: _\,_ ||- (Add _ _)    \: _ |- _ ] => inverts H
+       | [ H: _\,_ ||- (Var _)      \: _ |- _ ] => inverts H
+       | [ H: _\,_ ||- (Abs _ _)    \: _ |- _ ] => inverts H
+       | [ H: _\,_ ||- (App _ _)    \: _ |- _ ] => inverts H
+       | [ H: _\,_ ||- (TyAbs _)    \: _ |- _ ] => inverts H
+       | [ H: _\,_ ||- (TyApp _ _)  \: _ |- _ ] => inverts H
      end).
 
 (* This tactic 'usually' gets most of the inductive and easy cases
@@ -84,10 +85,10 @@ Tactic Notation "induction_type" ident(t) :=
 
 Lemma type_rel_imp_wellformed_term
   :  forall (D:kenv)(G:tenv)(t:term)(T:typ)
-  ,  D, G ||- t \: T
+  ,  D \, G ||- t \: T
   -> well_formed_term D G t.
 Proof.
-  rip; gen D G T; induction_type t.
+  loosen t; induction t; opburn' tt type_rel.  
 Qed.
 Hint Resolve type_rel_imp_wellformed_term.
 
@@ -98,8 +99,8 @@ Hint Resolve type_rel_imp_wellformed_term.
    we lift over the type environment, term, and type. *)
 Lemma kenv_insert
   :  forall (D:kenv)(G:tenv)(t:term)(T:typ)(X:tvar)
-  ,  D, G ||- t \: T
-  -> (insert D X KStar), (tenv_lift X G) ||- (typ_term_lift X t) \: (typ_lift X T).
+  ,  D \, G ||- t \: T
+  -> (insert D X KStar) \, (tenv_lift X G) ||- (typ_term_lift X t) \: (typ_lift X T).
 Proof.
   rip; gen D G T X; induction_type t.
  
@@ -135,8 +136,8 @@ Qed.
 
 Lemma kenv_weakening
   :  forall (D:kenv)(G:tenv)(t:term)(T:typ)(X:tvar)
-  ,  D, G ||- t \: T
-  -> (KStar :: D), (tenv_lift 0 G) ||- (typ_term_lift 0 t) \: (typ_lift 0 T).
+  ,  D \, G ||- t \: T
+  -> (KStar :: D) \, (tenv_lift 0 G) ||- (typ_term_lift 0 t) \: (typ_lift 0 T).
 Proof.
   rip; rewrite cons_as_insert; apply kenv_insert; burn.
 Qed.
@@ -144,8 +145,8 @@ Hint Resolve kenv_weakening.
 
 Lemma tenv_weakening
   :  forall (D:kenv)(G:tenv)(t:term)(T:typ)(x:var)
-  ,  D, delete G x ||- t \: T
-  -> D, G ||- term_lift x t \: T.
+  ,  D \, delete G x ||- t \: T
+  -> D \, G ||- term_lift x t \: T.
 Proof.
   rip; gen D G T x; induction_type t.
   match goal with
@@ -161,8 +162,8 @@ Hint Resolve tenv_weakening.
 Lemma type_substition_preserves_typing'
   :  forall (D:kenv)(G:tenv)(X:tvar)(t:term)(U T:typ)
   ,  delete D X \\- U \: KStar
-  -> D, G ||- t \: T
-  -> delete D X, (tenv_substitute X U G) ||- [X ~~> U] t \: [X |=> U] T.
+  -> D \, G ||- t \: T
+  -> delete D X \, (tenv_substitute X U G) ||- [X ~~> U] t \: [X |=> U] T.
 Proof.
   rip; gen D G X U T; induction_type t.
 
@@ -195,21 +196,23 @@ Qed.
 Lemma type_substition_preserves_typing
   :  forall (D:kenv)(G:tenv)(t:term)(U T:typ)
   ,  D \\- U \: KStar
-  ->  (KStar :: D), G ||- t \: T 
-  -> D, (tenv_substitute 0 U G) ||- [0 ~~> U] t \: [0 |=> U] T.
+  -> (KStar :: D) \, G ||- t \: T 
+  -> D \, (tenv_substitute 0 U G) ||- [0 ~~> U] t \: [0 |=> U] T.
 Proof.
   rip; eapply (type_substition_preserves_typing' (KStar :: D) _ 0); burn.
 Qed.
 Hint Resolve type_substition_preserves_typing.
 
+
+
 Lemma term_substition_preserves_typing' 
   :  forall (D:kenv)(G:tenv)(x:var)(s t:term)(U T:typ)
   ,  get G x = Some U 
-  -> D, delete G x ||- s \: U 
-  -> D, G ||- t \: T 
-  -> D, delete G x ||- [x ~> s] t \: T.
+  -> D \, delete G x ||- s \: U 
+  -> D \, G ||- t \: T 
+  -> D \, delete G x ||- [x ~> s] t \: T.
 Proof.
-  rip; gen D G x s U T; induction_type t;
+  loosen t; induction t; opburn' tt type_rel;
   match goal with
     (* TVar *)
     | [ |- context [ nat_compare _ _ ] ] 
@@ -226,99 +229,85 @@ Qed.
 
 Lemma term_substition_preserves_typing 
   :  forall (D:kenv)(G:tenv)(s t:term)(U T:typ)
-  ,  D, delete (U :: G) 0 ||- s \: U 
-  -> D, (U :: G) ||- t \: T 
-  -> D, delete (U :: G) 0 ||- [0 ~> s] t \: T.
+  ,  D \, delete (U :: G) 0 ||- s \: U 
+  -> D \, (U :: G) ||- t \: T 
+  -> D \, delete (U :: G) 0 ||- [0 ~> s] t \: T.
 Proof.
-  rip; eapply term_substition_preserves_typing'; tburn. 
+  rip; eapply term_substition_preserves_typing'; crush.
 Qed.
 Hint Resolve term_substition_preserves_typing.
 
+
 Theorem type_preservation
   :  forall (t t':term)(T:typ)
-  ,  nil, nil ||- t \: T
+  ,  nil \, nil ||- t \: T
   -> t ==> t'
-  -> nil, nil ||- t' \: T.
+  -> nil \, nil ||- t' \: T.
 Proof.
-  rip; gen t' T; induction t; introh Heval Htyp;
-  inverts Heval; inverts Htyp.
-
-  burn.
-  burn.
-  burn.
-  burn.
-  burn.
-
-  inverts H4.
-  eapply term_substition_preserves_typing. simpl. eassumption. assumption.
-  burn.
-
-  inverts H3.
-  eapply (type_substition_preserves_typing _ nil); burn.
-Qed.
+  loosen t; induction t;
+  opburn' 
+    (term_substition_preserves_typing, type_substition_preserves_typing) 
+    (step, type_rel).
+Qed. 
 
 Lemma nat_canonical 
   :  forall (t : term)
   ,  value t 
-  -> nil, nil ||- t \: TNat
+  -> nil \, nil ||- t \: TNat
   -> (exists n, t = (NConst n)).
 Proof.
-  rip; induction_type t; clean 2.
-Qed.
+  loosen t; induction t;
+  opburn' tt (type_rel, value, weak_normal).
+Qed. 
 Hint Resolve nat_canonical.
 
 Lemma arrow_canonical 
   :  forall (T1 T2:typ)(t : term)
   ,  value t 
-  -> nil, nil ||- t \: (TArrow T1 T2)
+  -> nil \, nil ||- t \: (TArrow T1 T2)
   -> (exists t0, t = (Abs T1 t0)).
 Proof.
-  rip; induction_type t; clean 2.
+  loosen t; induction t;
+  opburn' tt (type_rel, value, weak_normal).
 Qed.
 Hint Resolve arrow_canonical.
 
 Lemma all_canonical 
   :  forall (T:typ)(t:term)
   ,  value t 
-  -> nil, nil ||- t \: (TAll T)
+  -> nil \, nil ||- t \: (TAll T)
   -> (exists t0, t = (TyAbs t0)).
 Proof.
-  rip; induction_type t; clean 2.
-Qed.
+  loosen t; induction t;
+  opburn' tt (type_rel, value, weak_normal).
+Qed. 
 Hint Resolve all_canonical.
 
+Definition mark (T : Type) (x : T) := True.
+Arguments mark [T] _.
+(* Turn the marking into a helper tactic *)
 Theorem type_progress
-  :  forall (t t':term)(T:typ)
-  ,  nil, nil ||- t \: T
+  :  forall (t : term)(T:typ)
+  ,  nil \, nil ||- t \: T
   -> (exists t', t ==> t')
   \/ value t.
 Proof.
-  rip; gen t' T; induction_type t.
-
-  (* Add *)  
-  specialize (IHt1 _ H4).
-  specialize (IHt2 _ H6).
-  inverts IHt1; inverts IHt2.
-  left~; burn.
-  left~; burn.
-  left~. extend (nat_canonical t1); spec. elim Hextend. rip. subst. burn.
-  left~.
-   extend (nat_canonical t1); spec; extend (nat_canonical t2); spec. 
-   inverts Hextend; inverts Hextend0; burn.
-
-   (* App *)
-   specialize (IHt1 _ H4).
-   specialize (IHt2 _ H6).
-   inverts IHt1; inverts IHt2; tburn.
-   extend (arrow_canonical T1 T); spec.
-   specialize (Hextend t1 H H4). inverts Hextend.
-   burn.
-   extend (arrow_canonical T1 T); spec.
-   specialize (Hextend t1 H H4). inverts Hextend.
-   burn.
-
-   (* TyApp *)
-   specialize (IHt _ H4). inverts IHt; tburn.
-   extend (all_canonical T0 t H H4). inverts Hextend.
-   burn.
+  loosen t; induction t;
+  opburn'' 
+    (nat_canonical, arrow_canonical, all_canonical)
+    (step, type_rel)
+    ltac:(fun H =>
+      match goal with
+        | [ H : mark _ |- _] => fail 1
+        | _ =>
+            let T := fresh "T" in      
+            match type of H with
+              | _ \, _ ||- _ \: TArrow ?T1 ?T2 =>
+                pose (T:=TArrow T1 T2) ;
+                assert (mark (TArrow T1 T2)) by constructor
+              | _ \, _ ||- _ \: TAll ?T1 =>
+                pose (T:=TAll T1) ;
+                assert (mark (TAll T1)) by constructor
+            end
+      end).
 Qed.

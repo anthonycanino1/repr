@@ -1,13 +1,17 @@
 -R src/Repr Repr
+-I src/Repr/Tactics/Plugin
 src/Repr/Tactics/All.v
 src/Repr/Tactics/Burn.v
 src/Repr/Tactics/Rewrite.v
 src/Repr/Tactics/Norm.v
 src/Repr/Tactics/LibTactics.v
 src/Repr/Tactics/CpdtTactics.v
+src/Repr/Tactics/Opburn.v
 src/Repr/Tactics.v
 src/Repr/Lists.v
-
+src/Repr/Tactics/Plugin/construction.ml4
+src/Repr/Tactics/Plugin/construction_plugin.mllib
+src/Repr/Tactics/Plugin/ConstructionTac.v
 src/Repr/SystemFOp/Kind.v
 src/Repr/SystemFOp/Type.v
 src/Repr/SystemFOp/Term.v
