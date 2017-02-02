@@ -88,76 +88,92 @@ Lemma type_rel_imp_wellformed_term
   ,  D \, G ||- t \: T
   -> well_formed_term D G t.
 Proof.
-  loosen t; induction t; opburn' tt type_rel.  
+  linduction t; 
+  opburn' kind_rel_imp_well_formed_typ tt type_rel; eauto.
 Qed.
-Hint Resolve type_rel_imp_wellformed_term.
 
-(* Lemma used to prove kenv_weaking (since its induction hypothesis is not
-   strong enough.
+Definition marker_nOn (n:nat) := (0 + n).
+Hint Unfold marker_nOn.
 
-   We may insert a kind into a position in the kind environment provided
-   we lift over the type environment, term, and type. *)
+Lemma nOn
+  :  forall (n : nat)
+  ,  n = marker_nOn n.
+Proof. opburn. Qed.
+
+Lemma nOn_ONCE (n:nat) : rewrite_ONCE (nOn n).
+  constructor.
+Qed.
+
+Definition mark (T : Type) (x : T) := True.
+Arguments mark [T] _.
+
+Ltac search_inner_type H :=
+  match goal with
+  | [ H : mark _ |- _] => fail 1
+  | _ =>
+    let T := fresh "T" in      
+    match type of H with
+    | _ \, _ ||- _ \: TArrow ?T1 ?T2 =>
+      pose (T:=TArrow T1 T2) ;
+      assert (mark (TArrow T1 T2)) by constructor
+    | _ \, _ ||- _ \: TAll ?T1 =>
+      pose (T:=TAll T1) ;
+      assert (mark (TAll T1)) by constructor
+    end
+  end.
+
 Lemma kenv_insert
   :  forall (D:kenv)(G:tenv)(t:term)(T:typ)(X:tvar)
   ,  D \, G ||- t \: T
   -> (insert D X KStar) \, (tenv_lift X G) ||- (typ_term_lift X t) \: (typ_lift X T).
 Proof.
-  rip; gen D G T X; induction_type t.
- 
-  (* Add *)
-  assert (TNat = typ_lift X TNat).
-    burn.
-  econstructor; burn.
+  linduction t; 
+  opburn'' 
+    (get_tenv_lift, kind_rel_insert)
+    rewind_tenv_lift
+    type_rel 
+    ltac:(fun H => search_inner_type H).
 
   (* Abs *)
-  econstructor. burn. burn.
+  econstructor; opburn' tt rewind_tenv_lift tt.
 
   (* TyAbs *)
-  econstructor. fold typ_lift. rewrite insert_rewind. rewrite tenv_lift_SX.
-  burn.
+  econstructor; opburn' tt (insert_rewind, tenv_lift_SX) tt.
 
-  (* TyApp *)
-  break (nat_compare X 0); norm_nat_compare.
-  
-    (* Case X = 0 *)
-    subst.
-    assert (0 = 0+0). burn. rewrite H at 5.
-    rewrite typ_lift_over_subs'. simpl. 
-    econstructor; burn.
-
-    (* Case X < 0 *)
-    burn.
-
-    (* Case X > 0 *)
-    assert (X = 0+X). burn. rewrite H at 5.
-    rewrite typ_lift_over_subs'. simpl.
-    econstructor; burn.
-Qed.  
+  break (nat_compare X 0); norm_nat_compare; opburn.
+  opburn' tt ((nOn_ONCE O), typ_lift_over_subs') tt.
+  opburn' tt ((nOn_ONCE X), typ_lift_over_subs') tt.
+Qed.
 
 Lemma kenv_weakening
   :  forall (D:kenv)(G:tenv)(t:term)(T:typ)(X:tvar)
   ,  D \, G ||- t \: T
   -> (KStar :: D) \, (tenv_lift 0 G) ||- (typ_term_lift 0 t) \: (typ_lift 0 T).
 Proof.
-  rip; rewrite cons_as_insert; apply kenv_insert; burn.
+  intros; opburn' kenv_insert cons_as_insert tt.
 Qed.
-Hint Resolve kenv_weakening.
 
 Lemma tenv_weakening
   :  forall (D:kenv)(G:tenv)(t:term)(T:typ)(x:var)
   ,  D \, delete G x ||- t \: T
   -> D \, G ||- term_lift x t \: T.
 Proof.
-  rip; gen D G T x; induction_type t.
+  linduction t; 
+  opburn' tt tt type_rel;
   match goal with
-    | [ |- context[lift_le_gt_dec ?X ?Y] ] 
-      => break (lift_le_gt_dec X Y); tburn;
-         constructor; rewrite get_delete_above_idx in *; tburn
+    (* T-Var *)
+    | [ |- context [lift_le_gt_dec ?X ?Y] ] =>
+      break (lift_le_gt_dec X Y); opburn;
+        econstructor; opburn;
+          [rewrite get_delete_below_idx in *; opburn |
+           rewrite get_delete_above_idx in *; opburn ]
+    (* T-Abs *)
+    | _ => 
+      econstructor;
+      eapply IHt;
+      opburn' (tt,tt) delete_tenv_lift tt
   end.
-
-  econstructor. eapply IHt. rewrite delete_tenv_lift. burn.
 Qed.
-Hint Resolve tenv_weakening.
 
 Lemma type_substition_preserves_typing'
   :  forall (D:kenv)(G:tenv)(X:tvar)(t:term)(U T:typ)
@@ -165,32 +181,22 @@ Lemma type_substition_preserves_typing'
   -> D \, G ||- t \: T
   -> delete D X \, (tenv_substitute X U G) ||- [X ~~> U] t \: [X |=> U] T.
 Proof.
-  rip; gen D G X U T; induction_type t.
+  linduction t;
+  opburn' (tt,tt) tt type_rel; try econstructor;
+  opburn'' 
+    (get_tenv_substitute, type_substition_preserves_kinding')
+    (rewind_tenv_substitute, typ_lift_over_subs, delete_rewind)
+    tt
+    ltac:(fun H => search_inner_type H);
+  eauto.
 
-  (* TR-Nat *)
-  assert (TNat = [X |=> U] TNat). burn.
-  econstructor. burn. burn.
-
-  (* TR-Abs *)
-  simpl. econstructor. eapply type_substition_preserves_kinding'; burn.
-  rewrite rewind_tenv_substitute. burn.
-
-  (* TR-App *)
-  econstructor. specialize (IHt1 _ _ _ _ H _ H5). simpl in IHt1. eassumption.
-  eapply IHt2; burn.
-
-  (* TR-TyAbs *)
-  simpl. econstructor.
-  assert (X = 0 + X) by burn. rewrite H0 at 2; clear H0.
-  rewrite typ_lift_over_tenv_subs; simpl.
-  rewrite delete_rewind. 
-  eapply IHt; tburn.
-
-  (* TR-TyApp *)
-  rename t0 into T'. rewrite (commute_typ_subs 0 X); simpl; tburn.
-  eapply TR_TyApp; tburn.
-  assert (TAll ([S X |=> typ_lift 0 U] T0) = [X |=> U] TAll T0) by burn.
-  rewrite H0; burn.
+  opburn' tt ((nOn_ONCE X), typ_lift_over_tenv_subs, delete_rewind) tt.    
+  rewrite delete_rewind.
+  eapply IHt.
+  eapply kind_rel_weakening; opburn.
+  opburn.
+  
+  opburn' tt (commute_typ_subs O X) tt.
 Qed.
 
 Lemma type_substition_preserves_typing
@@ -199,11 +205,8 @@ Lemma type_substition_preserves_typing
   -> (KStar :: D) \, G ||- t \: T 
   -> D \, (tenv_substitute 0 U G) ||- [0 ~~> U] t \: [0 |=> U] T.
 Proof.
-  rip; eapply (type_substition_preserves_typing' (KStar :: D) _ 0); burn.
+  rip; eapply (type_substition_preserves_typing' (KStar :: D) _ 0); opburn.
 Qed.
-Hint Resolve type_substition_preserves_typing.
-
-
 
 Lemma term_substition_preserves_typing' 
   :  forall (D:kenv)(G:tenv)(x:var)(s t:term)(U T:typ)
@@ -212,19 +215,28 @@ Lemma term_substition_preserves_typing'
   -> D \, G ||- t \: T 
   -> D \, delete G x ||- [x ~> s] t \: T.
 Proof.
-  loosen t; induction t; opburn' tt type_rel;
+  linduction t; opburn' tt tt type_rel;
   match goal with
-    (* TVar *)
-    | [ |- context [ nat_compare _ _ ] ] 
-      => break_nat_compare; tburn; constructor; tburn
-    (* TAbs *)                                              
-    | [ |- context [ Abs _ _ ]         ]
-      => econstructor; try rewrite delete_rewind; tburn
-    (* TyAbs *)
-    | [ |- context [ TyAbs _ ]         ]
-      => econstructor; rewrite <- delete_tenv_lift; eapply IHt; tburn;
-         rewrite delete_tenv_lift; tburn 
-   end.
+  (* TVar *)
+  | [ |- context [ nat_compare _ _ ] ] =>
+    break_nat_compare; opburn;
+      econstructor; opburn' tt (get_delete_above_idx, get_delete_below_idx) tt
+
+  (* TAbs *)                                              
+  | [ |- context [ Abs _ _ ]         ] =>
+    econstructor; opburn; rewrite delete_rewind; eapply IHt; 
+      try (match goal with
+           | |- _ \, ?G ||- _ \: _ => 
+             pose G
+           end);
+      opburn' tenv_weakening tt tt
+
+  (* TyAbs *)
+  | [ |- context [ TyAbs _ ]         ] =>
+    econstructor; opburn;
+      rewrite <- delete_tenv_lift; eapply IHt; opburn' get_tenv_lift tt tt; eauto;
+        rewrite delete_tenv_lift; eapply kenv_weakening; opburn 
+  end.
 Qed.
 
 Lemma term_substition_preserves_typing 
@@ -233,10 +245,8 @@ Lemma term_substition_preserves_typing
   -> D \, (U :: G) ||- t \: T 
   -> D \, delete (U :: G) 0 ||- [0 ~> s] t \: T.
 Proof.
-  rip; eapply term_substition_preserves_typing'; crush.
+  rip; eapply term_substition_preserves_typing'; opburn.
 Qed.
-Hint Resolve term_substition_preserves_typing.
-
 
 Theorem type_preservation
   :  forall (t t':term)(T:typ)
@@ -247,7 +257,15 @@ Proof.
   loosen t; induction t;
   opburn' 
     (term_substition_preserves_typing, type_substition_preserves_typing) 
-    (step, type_rel).
+    tt
+    (step, type_rel);
+  match goal with
+    | [ H : _ ==> _ |- _ ] => inversion H; subst; eauto
+  end;
+  opburn' 
+    (type_substition_preserves_typing, term_substition_preserves_typing) 
+    tt 
+    type_rel.
 Qed. 
 
 Lemma nat_canonical 
@@ -256,10 +274,8 @@ Lemma nat_canonical
   -> nil \, nil ||- t \: TNat
   -> (exists n, t = (NConst n)).
 Proof.
-  loosen t; induction t;
-  opburn' tt (type_rel, value, weak_normal).
+  linduction t; opburn' tt tt (type_rel, value, weak_normal); eauto.
 Qed. 
-Hint Resolve nat_canonical.
 
 Lemma arrow_canonical 
   :  forall (T1 T2:typ)(t : term)
@@ -267,10 +283,8 @@ Lemma arrow_canonical
   -> nil \, nil ||- t \: (TArrow T1 T2)
   -> (exists t0, t = (Abs T1 t0)).
 Proof.
-  loosen t; induction t;
-  opburn' tt (type_rel, value, weak_normal).
+  linduction t; opburn' tt tt (type_rel, value, weak_normal); eauto.
 Qed.
-Hint Resolve arrow_canonical.
 
 Lemma all_canonical 
   :  forall (T:typ)(t:term)
@@ -278,13 +292,9 @@ Lemma all_canonical
   -> nil \, nil ||- t \: (TAll T)
   -> (exists t0, t = (TyAbs t0)).
 Proof.
-  loosen t; induction t;
-  opburn' tt (type_rel, value, weak_normal).
+  linduction t; opburn' tt tt (type_rel, value, weak_normal); eauto.
 Qed. 
-Hint Resolve all_canonical.
 
-Definition mark (T : Type) (x : T) := True.
-Arguments mark [T] _.
 (* Turn the marking into a helper tactic *)
 Theorem type_progress
   :  forall (t : term)(T:typ)
@@ -292,22 +302,20 @@ Theorem type_progress
   -> (exists t', t ==> t')
   \/ value t.
 Proof.
-  loosen t; induction t;
+  linduction t;
   opburn'' 
     (nat_canonical, arrow_canonical, all_canonical)
+    tt
     (step, type_rel)
-    ltac:(fun H =>
-      match goal with
-        | [ H : mark _ |- _] => fail 1
-        | _ =>
-            let T := fresh "T" in      
-            match type of H with
-              | _ \, _ ||- _ \: TArrow ?T1 ?T2 =>
-                pose (T:=TArrow T1 T2) ;
-                assert (mark (TArrow T1 T2)) by constructor
-              | _ \, _ ||- _ \: TAll ?T1 =>
-                pose (T:=TAll T1) ;
-                assert (mark (TAll T1)) by constructor
-            end
-      end).
+    ltac:(fun H => search_inner_type H).
+  Hint Resolve type_rel_imp_wellformed_term.
+  Hint Resolve kind_rel_imp_well_formed_typ.
+  Focus 2.
+  right~.
+  intuition eauto.
+  Focus 2.
+  right~.
+  intuition eauto.
+  left~.
+  exists (NConst (x0 + x)). intuition.
 Qed.

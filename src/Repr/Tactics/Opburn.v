@@ -6,7 +6,7 @@ Require Import Repr.Tactics.Plugin.ConstructionTac.
 (* Searches for x in a left-associated list of nested tuples *)
 Ltac in_list ls x :=
   match ls with
-    | x => idtac
+    | x      => idtac
     | (_, x) => idtac
     | (?ls', _) => in_list ls' x
   end.
@@ -18,17 +18,32 @@ Ltac app_hyps f :=
   end.
 
 (** Try calling tactic function [f] on every element of tupled list [ls], keeping the first call not to fail. *)
-Ltac app ls f :=
+Ltac rapp ls f :=
   match ls with
-    | (?LS, ?X) => f X || app LS f || fail 1
+    | (?LS, ?X) => f X || rapp LS f || fail 1
+    | ?X => f X
+  end.
+
+Ltac lapp ls f :=
+  match ls with
+    | (?LS, ?X) => lapp LS f || f X || fail 1
     | _ => f ls
   end.
 
 (** Run [f] on every element of [ls], not just the first that doesn't fail. *)
-Ltac all ls f :=
+Ltac rall ls f :=
   match ls with
-    | (?LS, ?X) => f X; all LS f
+    | (?LS, ?X) => f X; rall LS f
     | (_, _) => fail 1
+    | tt => idtac
+    | _ => f ls
+  end.
+
+Ltac lall ls f :=
+  match ls with
+    | (?LS, ?X) => lall LS f; f X
+    | (_, _) => fail 1
+    | tt => idtac
     | _ => f ls
   end.
 
@@ -52,6 +67,11 @@ Ltac loosen t :=
   in
   loosen_ls false.
 
+(* Tactic just loosens the term and performs induction. Simply meant to shorten
+ * the repeated loosen t; induction t proof starts. *)
+Ltac linduction t :=
+  loosen t; induction t.
+
 (* LAST : There is a tradeoff here: We want to perform as many obvious inversions
    as possible. Easy cases where we are confident we are making the right choice.
    (1) Inversion succeeds imediately (clears current goal)
@@ -69,10 +89,11 @@ Ltac simpl_hyp inv_one :=
     (inversion H; [idtac]; clear H; subst) ||
 
     (* Allow an inversion if all goals are immediately solved with eauto *)
-    (inversion H; subst; solve [eauto]; clear H) ||
+    (inversion H; subst; unshelve (solve [eauto]); fail) 
 
     (* Allow an inversion if only one goal remains after euato *)
-    (inversion H; subst; eauto; [idtac]; clear H) 
+    (*
+    || (inversion H; subst; eauto; [idtac]; clear H) *) (* This may go too far *)
   in
 
   match goal with
@@ -102,26 +123,47 @@ Arguments gend [T] _.
 (* [e] is a universally quantified hypothesis we attemp to instantiate
    [trace] marks the current state of our instantiation. Combine this with
    [done] above to add state to the context. *)
-Ltac inster_prim e trace :=
+Ltac inster e trace :=
   match type of e with
     | forall x : ?T, _ =>
       (* One modication to the search: We generate all easy constructors for a type
          if we haven't generated them for said type before *)
       (match type of T with
-        | Prop => idtac
+        | Prop => idtac 
         | _    => 
           match goal with
-            | [ H : gend T |- _ ] => idtac
+            | [ H : gend T |- _ ] => idtac 
             | _ => 
-              gen_constructors T ; 
-              assert (gend T) by constructor
+              match T with
+                | Type => idtac 
+                | option ?X =>
+                  (* We now that we either have None, or Some ?X. Skip gen_constructors, introduce
+                     and evar, and see if we can solve. *)
+                  let pn' := fresh "pn" in
+                  pose (pn':=None : option X) ;
+                  try (
+                  match goal with
+                    | [ HH : _ |- _ ] =>
+                      match (type of HH) with
+                        | X => 
+                          let ev := fresh "ev" in
+                          let pn := fresh "pn" in
+                          evar (ev : X) ;
+                          let ev' := eval unfold ev in ev in 
+                          pose (pn:=Some ev') 
+                       end
+                  end) ;
+                  assert (gend T) by constructor                    
+                | _ =>
+                  gen_constructors T ; 
+                  assert (gend T) by constructor
+              end
           end
       end) ;
-
       (* This picks the first context variable with the right type *)
       match goal with
         | [ H : _ |- _ ] =>
-          inster_prim (e H) (trace, H)
+          inster (e H) (trace, H)
         | _ => fail 2 
       end
     | _ =>
@@ -143,7 +185,7 @@ Ltac inster_prim e trace :=
               | _ =>
                 (* [e] is not a proof. Make sure we have not encountered this case in 
                    the trace before proceeding. *)
-                all trace ltac:(fun X =>
+                rall trace ltac:(fun X =>
                     match goal with
                       | [ H : done (_, X) |- _ ] => fail 1
                       | _ => idtac
@@ -170,10 +212,6 @@ Ltac inster_prim e trace :=
       inster_prim e trace
   end. *)
 
-Ltac inster e trace :=
-  inster_prim e trace.
-  
-
 Ltac un_done :=
   repeat match goal with
            | [ H : done _ |- _ ] => clear H
@@ -184,30 +222,84 @@ Ltac un_gend :=
            | [ H : gend _ |- _ ] => clear H
          end.
 
+Ltac rewriter_hyp :=
+  match goal with
+    | [ H: _ |- _ ] => rewrite H by solve [ auto ] 
+  end.
 
-Ltac opburn'' lemmas inv_one guide :=
+Ltac rewriter_loop := 
+  simpl; repeat (rewriter_hyp; autorewrite with core in *).
+
+Ltac rewriter := autorewrite with core in *; rewriter_loop.
+
+Definition rewrite_ONCE (T : Prop) (x : T) := True.
+Arguments rewrite_ONCE [T] _.
+
+Require Import JMeq.
+
+Ltac opburn'' lemmas rewrites inversions guide :=
   (* From Chlipala: Combine intuition with some simplification *)
-  let sintuition := simpl in *; intuition eauto; subst; 
-    repeat (simpl_hyp inv_one; intuition eauto; subst); try congruence in
+  let sintuition := intuition; simpl in *; intuition; subst; 
+    repeat (simpl_hyp inversions; intuition; subst); try congruence in
 
-  (sintuition;
+  (sintuition; rewriter' lemmas rewrites inversions guide;
    match lemmas with 
-     | tt => idtac
+     | tt => 
+       try (app_hyps guide)
+     | (tt,tt) => 
+       repeat (
+          try (app_hyps guide) ;
+           app_hyps ltac:(fun L => inster L L) ; 
+          repeat (simpl_hyp inversions; intuition)
+         ) ; un_done; un_gend
      | _ =>
        repeat (
           try (app_hyps guide) ;
-          (app lemmas ltac:(fun L => inster L L) 
+          (lapp lemmas ltac:(fun L => inster L L) 
            || app_hyps ltac:(fun L => inster L L)) ; 
-          repeat (simpl_hyp inv_one; intuition)
+          repeat (simpl_hyp inversions; intuition)
          ) ; un_done; un_gend
     end;
-    sintuition;
-    try omega; try (elimtype False; omega)).
+    sintuition; rewriter' lemmas rewrites inversions guide; sintuition;
+    try omega; try (elimtype False; omega)) 
 
-Ltac opburn := opburn'' tt tt ltac:(fun T => idtac).
-Ltac opburn' lemmas inv_one := opburn'' lemmas inv_one ltac:(fun T => idtac).
+with rewriter' lem rew inv g := 
+  autounfold with *; autorewrite with core in *;
+  repeat (
+    repeat (lapp rew ltac:(
+      fun H => 
+        match type of H with
+          | rewrite_ONCE ?P => 
+            match goal with 
+              | [ H : gend P |- _ ] => idtac
+              | _ =>
+                rewrite P by opburn'' lem tt inv g ;
+                assert (gend P) by constructor                    
+            end
+          | _ => 
+            rewrite H by opburn'' lem tt inv g 
+         end)) ;
+  autounfold with *; autorewrite with core in *;
+  repeat (
+      match goal with
+      | [ H : rewrite_ONCE ?P |- _ ] =>
+        rewrite P by opburn'' lem tt inv g ; 
+        clear H
+      | [ H : ?P |- _ ] =>
+        match P with
+        | context[JMeq] => fail 1 (** JMeq is too fancy to deal with here. *)
+        | _ => rewrite H by opburn'' lem tt inv g
+        end
+      end;
+      autounfold with *; autorewrite with core in *)
+  ).
 
-(* Take a guess at specializing a quantified hypothesis H with v,
+
+Ltac opburn := opburn'' tt tt tt ltac:(fun T => idtac).
+Ltac opburn' lemmas rewrites inversions := 
+  opburn'' lemmas rewrites inversions ltac:(fun T => idtac).
+
+(* Take a guess at specializing a quantified hypothesis H with ,
    but only succeed if we can simplfy the hypothesis after specializing *)
 Ltac guess v H :=
   let contains H :=

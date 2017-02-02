@@ -7,6 +7,7 @@ Require Import Repr.Tactics.Rewrite.
 Require Import Repr.Tactics.Burn.
 Require Import Repr.Tactics.Norm.
 Require Import Repr.Tactics.LibTactics.
+Require Import Repr.Tactics.Opburn.
 
 Require Import Coq.Arith.Peano_dec.
 Require Import Coq.Arith.Compare_dec.
@@ -235,14 +236,3 @@ where "t1 '==>*' t2" := (multi t1 t2).
 Hint Constructors multi.
 
 (********************************************************************)
-
-(* Theorem : Small-step semantics is deterministic. *)
-Theorem step_deterministic 
-  :  forall t1 t2 t3
-  ,  t1 ==> t2 
-  -> t1 ==> t3 
-  -> t2 = t3.
-Proof.
-  introh Hs1; gen t3; induction Hs1; introh Hs2;
-  inverts Hs2; clean 3; tburn.
-Qed.

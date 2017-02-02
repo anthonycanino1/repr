@@ -22,10 +22,23 @@ Ltac rip :=
 (* Break Tactic 
  *  - Remembers a term and destructs it
  *)
-Ltac break term :=
-  let name := fresh "bk" in 
-  remember term as name;
-  destruct name.
+Ltac break_as term id :=
+  let name := fresh "bk" in
+  remember term as name ;
+  match goal with
+    | [ H : name = _ |- _ ] => 
+      rename H into id ;
+      destruct name
+  end.
+
+Tactic Notation "break" constr(term) :=
+  let I1 := fresh "Heq" in
+  break_as term I1.
+
+Tactic Notation "break" constr(term) "as" simple_intropattern(I1) :=
+  break_as term I1.
+  
+  
 
 
 (********************************************************************)
